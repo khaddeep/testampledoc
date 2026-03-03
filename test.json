@@ -1,0 +1,185 @@
+{
+  "apiVersion": "2024-11-30",
+  "modelId": "prebuilt-layout",
+  "stringIndexType": "utf16CodeUnit",
+  "contentFormat": "text",
+  "content": "NEWS TODAY\nMirjam Nilsson\n\nWhile healthcare is still in the early stages of its AI journey, we are seeing pharmaceutical and other life sciences organizations making major investments in AI and related technologies.\n\n☒ clear  ☐ vague  ☒ coherent\n\n(In millions, except earnings per share)\nRevenue  12,340\nOperating income  2,150\nNet income  1,420\n",
+  "documents": [],
+  "pages": [
+    {
+      "pageNumber": 1,
+      "angle": 0,
+      "width": 915,
+      "height": 1190,
+      "unit": "pixel",
+      "spans": [
+        { "offset": 0, "length": 260 }
+      ],
+      "words": [
+        {
+          "content": "NEWS",
+          "polygon": [70, 80, 160, 80, 160, 110, 70, 110],
+          "confidence": 0.999,
+          "span": { "offset": 0, "length": 4 }
+        },
+        {
+          "content": "TODAY",
+          "polygon": [170, 80, 275, 80, 275, 110, 170, 110],
+          "confidence": 0.999,
+          "span": { "offset": 5, "length": 5 }
+        }
+      ],
+      "lines": [
+        {
+          "content": "NEWS TODAY",
+          "polygon": [70, 80, 275, 80, 275, 110, 70, 110],
+          "spans": [{ "offset": 0, "length": 10 }]
+        },
+        {
+          "content": "Mirjam Nilsson",
+          "polygon": [70, 125, 260, 125, 260, 150, 70, 150],
+          "spans": [{ "offset": 11, "length": 13 }]
+        }
+      ],
+      "selectionMarks": [
+        {
+          "state": "selected",
+          "polygon": [70, 470, 90, 470, 90, 490, 70, 490],
+          "confidence": 0.995,
+          "span": { "offset": 186, "length": 1 }
+        },
+        {
+          "state": "unselected",
+          "polygon": [155, 470, 175, 470, 175, 490, 155, 490],
+          "confidence": 0.992,
+          "span": { "offset": 196, "length": 1 }
+        }
+      ]
+    }
+  ],
+  "paragraphs": [
+    {
+      "role": "title",
+      "content": "NEWS TODAY",
+      "spans": [{ "offset": 0, "length": 10 }],
+      "boundingRegions": [
+        {
+          "pageNumber": 1,
+          "polygon": [70, 80, 275, 80, 275, 110, 70, 110]
+        }
+      ]
+    },
+    {
+      "role": "sectionHeading",
+      "content": "Mirjam Nilsson",
+      "spans": [{ "offset": 11, "length": 13 }],
+      "boundingRegions": [
+        {
+          "pageNumber": 1,
+          "polygon": [70, 125, 260, 125, 260, 150, 70, 150]
+        }
+      ]
+    },
+    {
+      "content": "While healthcare is still in the early stages of its AI journey, we are seeing pharmaceutical and other life sciences organizations making major investments in AI and related technologies.",
+      "spans": [{ "offset": 26, "length": 164 }],
+      "boundingRegions": [
+        {
+          "pageNumber": 1,
+          "polygon": [70, 190, 845, 190, 845, 310, 70, 310]
+        }
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "rowCount": 4,
+      "columnCount": 2,
+      "boundingRegions": [
+        {
+          "pageNumber": 1,
+          "polygon": [70, 560, 845, 560, 845, 690, 70, 690]
+        }
+      ],
+      "spans": [{ "offset": 210, "length": 50 }],
+      "cells": [
+        {
+          "kind": "columnHeader",
+          "rowIndex": 0,
+          "columnIndex": 0,
+          "columnSpan": 2,
+          "content": "(In millions, except earnings per share)",
+          "boundingRegions": [
+            {
+              "pageNumber": 1,
+              "polygon": [70, 560, 845, 560, 845, 585, 70, 585]
+            }
+          ],
+          "spans": [{ "offset": 210, "length": 38 }]
+        },
+        {
+          "rowIndex": 1,
+          "columnIndex": 0,
+          "content": "Revenue",
+          "boundingRegions": [
+            {
+              "pageNumber": 1,
+              "polygon": [70, 595, 450, 595, 450, 620, 70, 620]
+            }
+          ],
+          "spans": [{ "offset": 249, "length": 7 }]
+        },
+        {
+          "rowIndex": 1,
+          "columnIndex": 1,
+          "content": "12,340",
+          "boundingRegions": [
+            {
+              "pageNumber": 1,
+              "polygon": [460, 595, 845, 595, 845, 620, 460, 620]
+            }
+          ],
+          "spans": [{ "offset": 258, "length": 6 }]
+        }
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "1.1",
+      "boundingRegions": [
+        {
+          "pageNumber": 1,
+          "polygon": [70, 720, 845, 720, 845, 1000, 70, 1000]
+        }
+      ],
+      "spans": [{ "offset": 0, "length": 0 }],
+      "elements": ["/paragraphs/2"],
+      "caption": {
+        "content": "Figure 1: Here is a figure with text",
+        "boundingRegions": [
+          {
+            "pageNumber": 1,
+            "polygon": [70, 1005, 500, 1005, 500, 1030, 70, 1030]
+          }
+        ],
+        "spans": [{ "offset": 0, "length": 0 }],
+        "elements": ["/paragraphs/2"]
+      }
+    }
+  ],
+  "sections": [
+    {
+      "spans": [{ "offset": 0, "length": 260 }],
+      "elements": ["/paragraphs/0", "/paragraphs/1", "/paragraphs/2", "/tables/0", "/figures/0"]
+    }
+  ],
+  "styles": [
+    {
+      "isHandwritten": false,
+      "confidence": 0.99,
+      "spans": [{ "offset": 0, "length": 260 }]
+    }
+  ],
+  "warnings": []
+}
