@@ -1,7 +1,7 @@
 import json
+import re
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Optional, DefaultDict
-from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
 from tabulate import tabulate
 
 # ----------------------------
@@ -9,30 +9,15 @@ from tabulate import tabulate
 # ----------------------------
 INPUT_JSON = Path("/mnt/data/test.json")
 
-# Common paragraph roles used for header/footer (varies by model/version)
 HEADER_ROLES = {"pageHeader", "header", "runningHeader"}
 FOOTER_ROLES = {"pageFooter", "footer", "runningFooter"}
+HF_ROLES = HEADER_ROLES | FOOTER_ROLES
 
 
 # ----------------------------
 # Helpers
 # ----------------------------
-def parse_element_ref(ref: str) -> Tuple[str, int]:
-    parts = ref.strip("/").split("/")
-    if len(parts) != 2:
-        raise ValueError(f"Unexpected element ref format: {ref}")
-    return parts[0], int(parts[1])
-
-
-def safe_get_role(p: Dict[str, Any]) -> str:
-    return p.get("role", "paragraph")
-
-
 def get_page_number(element: Dict[str, Any]) -> Optional[int]:
-    """
-    Returns the first bounding region's pageNumber if present.
-    Works for paragraphs, tables, figures (best-effort).
-    """
     brs = element.get("boundingRegions") or []
     if brs and isinstance(brs, list):
         pn = brs[0].get("pageNumber")
@@ -41,15 +26,36 @@ def get_page_number(element: Dict[str, Any]) -> Optional[int]:
     return None
 
 
+def safe_role(p: Dict[str, Any]) -> str:
+    return p.get("role", "paragraph")
+
+
+def build_ref_to_section_map(sections: List[Dict[str, Any]], kind: str) -> Dict[int, int]:
+    """
+    Map {index -> section_number (1-based)} for refs like "/tables/3" or "/paragraphs/10".
+    """
+    out: Dict[int, int] = {}
+    prefix = f"/{kind}/"
+    for s_idx, section in enumerate(sections, start=1):
+        for ref in (section.get("elements") or []):
+            if isinstance(ref, str) and ref.startswith(prefix):
+                try:
+                    idx = int(ref.split("/")[-1])
+                    out[idx] = s_idx
+                except ValueError:
+                    pass
+    return out
+
+
 # ----------------------------
-# Table Processing
+# Table helpers
 # ----------------------------
 def build_table_matrix(table: Dict[str, Any]) -> List[List[str]]:
     rows = table.get("rowCount", 0)
     cols = table.get("columnCount", 0)
     matrix = [["" for _ in range(cols)] for _ in range(rows)]
 
-    for cell in table.get("cells", []):
+    for cell in table.get("cells", []) or []:
         r = cell.get("rowIndex", 0)
         c = cell.get("columnIndex", 0)
         rs = cell.get("rowSpan", 1) or 1
@@ -61,180 +67,233 @@ def build_table_matrix(table: Dict[str, Any]) -> List[List[str]]:
                 if rr == r and cc == c:
                     matrix[rr][cc] = text
                 else:
-                    # Leave spanned cells blank (or put a marker if you prefer)
                     if matrix[rr][cc] == "":
                         matrix[rr][cc] = ""
 
     return matrix
 
 
-def print_table_with_tabulate(table: Dict[str, Any]) -> None:
-    matrix = build_table_matrix(table)
+def matrix_to_tabulate_string(matrix: List[List[str]], max_rows: Optional[int] = 12) -> str:
     if not matrix:
-        print("  (Empty table)")
-        return
-
+        return "(empty table)"
     headers = matrix[0]
     rows = matrix[1:] if len(matrix) > 1 else []
-    print(tabulate(rows, headers=headers, tablefmt="grid"))
+    if max_rows is not None and len(rows) > max_rows:
+        rows = rows[:max_rows] + [["…"] * len(headers)]
+    return tabulate(rows, headers=headers, tablefmt="grid")
 
 
 # ----------------------------
-# Header/Footer Extraction
+# Generic search engine (used by each entity function)
 # ----------------------------
-def collect_page_headers_footers(paragraphs: List[Dict[str, Any]]) -> Tuple[Dict[int, List[str]], Dict[int, List[str]]]:
+def search_entity_generic(
+    data: Dict[str, Any],
+    *,
+    entity_name: str,
+    regex_pattern: str,
+    case_sensitive: bool = False,
+    search_in_tables: bool = True,
+    search_in_paragraphs: bool = True,
+    include_headers_footers: bool = True,  # <--- controls footer/header scanning
+    return_full_table_matrix: bool = True,
+    table_preview_max_rows: int = 12,
+) -> Dict[str, Any]:
     """
-    Builds maps: pageNumber -> [header texts], pageNumber -> [footer texts]
-    based on paragraph role and boundingRegions.pageNumber.
+    Returns a dict with:
+      - entity_name
+      - matches: list of {intent, ...}
+      - contexts: table contexts and paragraph contexts
     """
-    headers_by_page: DefaultDict[int, List[str]] = defaultdict(list)
-    footers_by_page: DefaultDict[int, List[str]] = defaultdict(list)
-
-    for p in paragraphs:
-        role = safe_get_role(p)
-        pn = get_page_number(p)
-        if pn is None:
-            continue
-
-        text = (p.get("content") or "").strip()
-        if not text:
-            continue
-
-        if role in HEADER_ROLES:
-            headers_by_page[pn].append(text)
-        elif role in FOOTER_ROLES:
-            footers_by_page[pn].append(text)
-
-    return dict(headers_by_page), dict(footers_by_page)
-
-
-def print_page_header(page_num: int, total_pages: Optional[int], headers_by_page: Dict[int, List[str]]) -> None:
-    print("\n" + "#" * 70)
-    if total_pages:
-        print(f"PAGE {page_num} of {total_pages}")
-    else:
-        print(f"PAGE {page_num}")
-    print("#" * 70)
-
-    header_lines = headers_by_page.get(page_num, [])
-    if header_lines:
-        print("[PAGE HEADER]")
-        for line in header_lines:
-            print(line)
-
-
-def print_page_footer(page_num: int, total_pages: Optional[int], footers_by_page: Dict[int, List[str]]) -> None:
-    footer_lines = footers_by_page.get(page_num, [])
-    if footer_lines:
-        print("\n[PAGE FOOTER]")
-        for line in footer_lines:
-            print(line)
-
-    print("\n" + "-" * 70)
-    if total_pages:
-        print(f"End of Page {page_num} / {total_pages}")
-    else:
-        print(f"End of Page {page_num}")
-    print("-" * 70)
-
-
-# ----------------------------
-# Main Printing (Section -> Elements, with Page Header/Footer)
-# ----------------------------
-def print_sections(data: Dict[str, Any]) -> None:
     sections = data.get("sections", []) or []
-    paragraphs = data.get("paragraphs", []) or []
     tables = data.get("tables", []) or []
-    figures = data.get("figures", []) or []
-    pages = data.get("pages", []) or []
+    paragraphs = data.get("paragraphs", []) or []
 
-    total_pages = len(pages) if pages else None
+    table_to_section = build_ref_to_section_map(sections, "tables")
+    para_to_section = build_ref_to_section_map(sections, "paragraphs")
 
-    headers_by_page, footers_by_page = collect_page_headers_footers(paragraphs)
+    flags = 0 if case_sensitive else re.IGNORECASE
+    rx = re.compile(regex_pattern, flags=flags)
 
-    if not sections:
-        print("No sections found.")
-        return
+    matches: List[Dict[str, Any]] = []
+    contexts: Dict[str, Dict[int, Any]] = {"tables": {}, "paragraphs": {}}
 
-    for s_idx, section in enumerate(sections, start=1):
-        print("\n" + "=" * 70)
-        print(f"SECTION {s_idx}")
-        print("=" * 70)
+    # ---- Tables ----
+    if search_in_tables:
+        for t_idx, table in enumerate(tables):
+            page = get_page_number(table)
+            section = table_to_section.get(t_idx)
 
-        elements = section.get("elements", []) or []
+            table_hit = False
+            for cell in table.get("cells", []) or []:
+                text = (cell.get("content") or "").strip()
+                if not text:
+                    continue
+                m = rx.search(text)
+                if not m:
+                    continue
 
-        current_page: Optional[int] = None
+                table_hit = True
+                matches.append(
+                    {
+                        "entity": entity_name,
+                        "intent": "table",
+                        "source_index": t_idx,
+                        "section": section,
+                        "page": page,
+                        "row": cell.get("rowIndex"),
+                        "col": cell.get("columnIndex"),
+                        "match": m.group(0),
+                        "cell_text": text,
+                        "groups": m.groupdict() if m.groupdict() else m.groups(),
+                    }
+                )
 
-        def ensure_page_started(pn: Optional[int]) -> None:
-            nonlocal current_page
-            if pn is None:
-                return
-            if current_page != pn:
-                # Close previous page (footer)
-                if current_page is not None:
-                    print_page_footer(current_page, total_pages, footers_by_page)
-                # Start new page (header)
-                current_page = pn
-                print_page_header(current_page, total_pages, headers_by_page)
+            # Add full table context ONCE if any hit in that table
+            if table_hit and t_idx not in contexts["tables"]:
+                matrix = build_table_matrix(table)
+                contexts["tables"][t_idx] = {
+                    "intent": "table",
+                    "table": t_idx,
+                    "section": section,
+                    "page": page,
+                    "matrix": matrix if return_full_table_matrix else None,
+                    "preview": matrix_to_tabulate_string(matrix, max_rows=table_preview_max_rows),
+                }
 
-        # Print elements in the section’s element order
-        for ref in elements:
-            try:
-                kind, idx = parse_element_ref(ref)
-            except ValueError:
-                print(f"\n[Unknown element ref: {ref}]")
+    # ---- Paragraphs (including footer/header if enabled) ----
+    if search_in_paragraphs:
+        for p_idx, p in enumerate(paragraphs):
+            role = safe_role(p)
+            if not include_headers_footers and role in HF_ROLES:
+                continue  # skip footer/header paragraphs if turned off
+
+            text = (p.get("content") or "").strip()
+            if not text:
                 continue
 
-            if kind == "paragraphs":
-                if 0 <= idx < len(paragraphs):
-                    p = paragraphs[idx]
-                    pn = get_page_number(p)
-                    ensure_page_started(pn)
+            m = rx.search(text)
+            if not m:
+                continue
 
-                    role = safe_get_role(p)
-                    text = (p.get("content") or "").strip()
+            page = get_page_number(p)
+            section = para_to_section.get(p_idx)
 
-                    # Skip printing header/footer paragraphs again in body (optional)
-                    if role in HEADER_ROLES or role in FOOTER_ROLES:
-                        continue
+            matches.append(
+                {
+                    "entity": entity_name,
+                    "intent": "paragraph",          # paragraph intent includes header/footer/body
+                    "paragraph_role": role,         # tells you if it was pageFooter etc.
+                    "source_index": p_idx,
+                    "section": section,
+                    "page": page,
+                    "match": m.group(0),
+                    "paragraph_text": text,
+                    "groups": m.groupdict() if m.groupdict() else m.groups(),
+                }
+            )
 
-                    print(f"\n[{role.upper()}]")
-                    print(text)
+            if p_idx not in contexts["paragraphs"]:
+                contexts["paragraphs"][p_idx] = {
+                    "intent": "paragraph",
+                    "paragraph": p_idx,
+                    "role": role,
+                    "section": section,
+                    "page": page,
+                    "content": text,  # entire paragraph (footer/header included if enabled)
+                }
 
-            elif kind == "tables":
-                if 0 <= idx < len(tables):
-                    t = tables[idx]
-                    pn = get_page_number(t)
-                    ensure_page_started(pn)
-
-                    print("\n[TABLE]")
-                    print_table_with_tabulate(t)
-
-            elif kind == "figures":
-                if 0 <= idx < len(figures):
-                    f = figures[idx]
-                    pn = get_page_number(f)
-                    ensure_page_started(pn)
-
-                    print("\n[FIGURE]")
-                    caption = (f.get("caption") or {}).get("content")
-                    if caption:
-                        print("Caption:", caption)
-
-            else:
-                print(f"\n[Unsupported element kind: {kind}]")
-
-        # Close last page of this section (footer)
-        if current_page is not None:
-            print_page_footer(current_page, total_pages, footers_by_page)
+    return {
+        "entity": entity_name,
+        "regex": regex_pattern,
+        "count": len(matches),
+        "matches": matches,
+        "contexts": contexts,
+    }
 
 
+# ----------------------------
+# Independent entity functions (examples)
+# ----------------------------
+def extract_invoice_numbers(data: Dict[str, Any]) -> Dict[str, Any]:
+    return search_entity_generic(
+        data,
+        entity_name="InvoiceNumber",
+        regex_pattern=r"\bINV[- ]?\d{3,}\b",
+        include_headers_footers=True,   # searches footers too
+    )
+
+
+def extract_dollar_amounts(data: Dict[str, Any]) -> Dict[str, Any]:
+    return search_entity_generic(
+        data,
+        entity_name="DollarAmount",
+        regex_pattern=r"\$\s?\d+(?:,\d{3})*(?:\.\d{2})?",
+        include_headers_footers=True,
+    )
+
+
+def extract_dates(data: Dict[str, Any]) -> Dict[str, Any]:
+    return search_entity_generic(
+        data,
+        entity_name="Date",
+        regex_pattern=r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|\d{4}-\d{2}-\d{2})\b",
+        include_headers_footers=True,
+    )
+
+
+def extract_emails(data: Dict[str, Any]) -> Dict[str, Any]:
+    return search_entity_generic(
+        data,
+        entity_name="Email",
+        regex_pattern=r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b",
+        include_headers_footers=True,
+    )
+
+
+# ----------------------------
+# Example: run and print later
+# ----------------------------
 def main() -> None:
-    if not INPUT_JSON.exists():
-        raise FileNotFoundError(f"JSON file not found: {INPUT_JSON}")
-
     data = json.loads(INPUT_JSON.read_text(encoding="utf-8"))
-    print_sections(data)
+
+    # Each entity is independent (your requirement)
+    results = [
+        extract_invoice_numbers(data),
+        extract_dollar_amounts(data),
+        extract_dates(data),
+        extract_emails(data),
+    ]
+
+    # Print at the end (only here)
+    for res in results:
+        print("\n" + "=" * 100)
+        print(f"{res['entity']} | matches={res['count']} | regex={res['regex']}")
+        print("=" * 100)
+
+        for m in res["matches"]:
+            if m["intent"] == "table":
+                print(
+                    f"- [TABLE] table#{m['source_index']} page={m['page']} section={m['section']} "
+                    f"row={m['row']} col={m['col']} match={m['match']}"
+                )
+            else:
+                print(
+                    f"- [PARA] para#{m['source_index']} role={m.get('paragraph_role')} "
+                    f"page={m['page']} section={m['section']} match={m['match']}"
+                )
+
+        # Contexts
+        if res["contexts"]["paragraphs"]:
+            print("\n--- Paragraph contexts ---")
+            for _, pctx in sorted(res["contexts"]["paragraphs"].items()):
+                print(f"[para#{pctx['paragraph']}] role={pctx['role']} page={pctx['page']} section={pctx['section']}")
+                print(pctx["content"])
+
+        if res["contexts"]["tables"]:
+            print("\n--- Table contexts (preview) ---")
+            for _, tctx in sorted(res["contexts"]["tables"].items()):
+                print(f"[table#{tctx['table']}] page={tctx['page']} section={tctx['section']}")
+                print(tctx["preview"])
 
 
 if __name__ == "__main__":
